@@ -11,7 +11,6 @@ pub struct Solver<D> {
     pub field: Field<D>,
     courant_number: Field<D>,
     c_err: Field<D>,
-    field_store: Field<D>,
     steps_done: usize,
 }
 
@@ -37,20 +36,15 @@ impl Solver1D {
     
     fn upwind(&mut self, mpdata: bool)  {
 	let c: &Field1D;
-	self.field_store = self.field.clone();
 	if !mpdata {
 	    c = &self.courant_number;
 	} else {
 	    self.get_c_err();
 	    c = &self.c_err;
 	}
-	Zip::from(self.field_store.slice_mut(s![1..-1]))
-	    .and(self.field.windows(3))
-	    .and(c.slice(s![1..]).windows(2))
-	    .for_each(|x, w, c|{
-		*x = *x - (F(w[1], w[2], c[1]) - F(w[0], w[1], c[0]));
-	    });
-	self.field = self.field_store.clone();
+	for x in 1..self.field.len()-1 {
+	    self.field[x] = self.field[x]-(F(self.field[x],self.field[x+1],c[x+1])-F(self.field[x-1],self.field[x],c[x]));
+	}
 	self.steps_done += 1;
     }
 
@@ -78,7 +72,6 @@ impl Solver1D {
     pub fn assemble(vel: f64, dt: f64, dx: f64, linstart: f64, linend: f64, nsteps: usize) -> Self {
 	Solver1D {
 	    field: Field1D::linspace(linstart, linend, nsteps),
-	    field_store: Field1D::linspace(linstart, linend, nsteps),
 	    courant_number: (vel*dt)/dx*Field1D::ones(nsteps),
 	    c_err: (vel*dt)/dx*Field1D::ones(nsteps),
 	    steps_done: 0
